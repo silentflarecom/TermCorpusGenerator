@@ -206,7 +206,12 @@ class BatchCrawler:
                         print(f"✓ Successfully crawled: {term} (Depth: {current_depth})")
                         
                         # Handle Depth Crawling
-                        if current_depth < self.max_depth and result.get('associations'):
+                        # Only add new terms if we haven't reached max depth yet
+                        # max_depth=1 means only root terms (no associations)
+                        # max_depth=2 means root + 1 layer of associations
+                        # max_depth=3 means root + 2 layers of associations
+                        next_depth = current_depth + 1
+                        if next_depth < self.max_depth and result.get('associations'):
                             new_terms = []
                             # Filter associations
                             existing_terms_in_task = await get_task_terms(self.task_id)
@@ -218,12 +223,12 @@ class BatchCrawler:
                                     new_terms.append(target)
                                     existing_set.add(target.lower())
                             
-                            # Limit new terms
-                            new_terms = new_terms[:10] # Hardcoded limit for now, should be from config
+                            # Limit new terms per source
+                            new_terms = new_terms[:10]
                             
                             if new_terms:
-                                print(f"  -> Discovered {len(new_terms)} new terms from {term}")
-                                await add_terms_to_task(self.task_id, new_terms, current_depth + 1, term_record['id'])
+                                print(f"  -> Discovered {len(new_terms)} new terms from {term} (will be depth {next_depth})")
+                                await add_terms_to_task(self.task_id, new_terms, next_depth, term_record['id'])
                         
                     except Exception as e:
                         print(f"✗ Failed to crawl {term}: {str(e)}")

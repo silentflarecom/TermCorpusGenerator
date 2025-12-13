@@ -1,0 +1,12 @@
+# Agent (economics)
+
+## English
+In economics, an agent is an actor (more specifically, a decision maker) in a model of some aspect of the economy. Typically, every agent makes decisions by solving a well- or ill-defined optimization or choice problem.
+For example, buyers (consumers) and sellers (producers) are two common types of agents in partial equilibrium models of a single market. Macroeconomic models, especially dynamic stochastic general equilibrium models that are explicitly based on microfoundations, often distinguish households, firms, and governments or central banks as the main types of agents in the economy. Each of these agents may play multiple roles in the economy; households, for example, might act as consumers, as workers, and as voters in the model. Some macroeconomic models distinguish even more types of agents, such as workers and shoppers or commercial banks.
+The term agent is also used in relation to principal–agent models; in this case, it refers specifically to someone delegated to act on beh...
+
+[Link](https://en.wikipedia.org/wiki/Agent_(economics))
+
+## Chinese
+Translation not found.
+
