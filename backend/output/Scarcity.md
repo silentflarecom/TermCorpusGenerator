@@ -8,6 +8,6 @@ In economics, scarcity refers to the basic fact of life that there exists only a
 [Link](https://en.wikipedia.org/wiki/Scarcity)
 
 ## Chinese
-稀少性（英語：Scarcity），又稱為稀少性、匮乏性，是經濟學中的基本概念，意思是個人或社會的資源供应无法滿足人類的需求；稀缺性也可以是指一种难以普及和工厂化生产的財貨或服务；稀缺性还可以包括个人缺乏资金或信。稀缺性的反面是丰富性、富裕性。
+稀少性（英语：Scarcity），又称为稀少性、匮乏性，是经济学中的基本概念，意思是个人或社会的资源供应无法满足人类的需求；稀缺性也可以是指一种难以普及和工厂化生产的财货或服务；稀缺性还可以包括个人缺乏资金或信。稀缺性的反面是丰富性、富裕性。
 
 [Link](https://zh.wikipedia.org/wiki/%E7%A8%80%E7%BC%BA%E6%80%A7)

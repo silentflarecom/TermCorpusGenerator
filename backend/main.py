@@ -220,6 +220,7 @@ async def get_status(task_id: int):
         completed_terms=task['completed_terms'],
         failed_terms=task['failed_terms'],
         progress_percent=progress,
+        max_depth=task.get('max_depth', 1),
         created_at=task['created_at'],
         updated_at=task['updated_at']
     )

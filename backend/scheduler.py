@@ -6,11 +6,8 @@ from database import (
     update_term_status, 
     update_task_counters,
     get_pending_terms,
-    get_task_status
-)
-
-    get_pending_terms,
     get_task_status,
+    get_task_terms,
     save_term_associations,
     add_terms_to_task
 )
@@ -67,15 +64,15 @@ class BatchCrawler:
                 zh_title = langlinks['zh'].title
                 page_zh = self.wiki_zh.page(zh_title)
                 
-                    if page_zh.exists():
-                        raw_zh_summary = page_zh.summary[0:1000] + "..." if len(page_zh.summary) > 1000 else page_zh.summary
-                        # Convert to Simplified Chinese
-                        try:
-                            import zhconv
-                            zh_summary = zhconv.convert(raw_zh_summary, 'zh-cn')
-                        except ImportError:
-                            zh_summary = raw_zh_summary
-                        zh_url = page_zh.fullurl
+                if page_zh.exists():
+                    raw_zh_summary = page_zh.summary[0:1000] + "..." if len(page_zh.summary) > 1000 else page_zh.summary
+                    # Convert to Simplified Chinese
+                    try:
+                        import zhconv
+                        zh_summary = zhconv.convert(raw_zh_summary, 'zh-cn')
+                    except ImportError:
+                        zh_summary = raw_zh_summary
+                    zh_url = page_zh.fullurl
             
             # Extract Associations
             associations = []
