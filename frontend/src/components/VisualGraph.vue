@@ -45,30 +45,55 @@ const renderGraph = () => {
     .attr("viewBox", [0, 0, width, height])
     .attr("style", "max-width: 100%; height: auto;")
 
-  // Simulation setup
+  // Create a set of valid node IDs
+  const nodeIds = new Set(graphData.value.nodes.map(n => n.id))
+  
+  // Filter edges and convert from {from, to} to {source, target} for D3
+  const validEdges = graphData.value.edges
+    .filter(e => nodeIds.has(e.from) && nodeIds.has(e.to))
+    .map(e => ({
+      source: e.from,
+      target: e.to,
+      type: e.type,
+      value: e.value
+    }))
+
+  // Limit edges to reduce density (show max 100 edges)
+  const displayEdges = validEdges.slice(0, 100)
+
+  // Simulation setup with better spacing
   simulation = d3.forceSimulation(graphData.value.nodes)
-    .force("link", d3.forceLink(graphData.value.edges).id(d => d.id).distance(100))
-    .force("charge", d3.forceManyBody().strength(-300))
+    .force("link", d3.forceLink(displayEdges).id(d => d.id).distance(150))  // Increased distance
+    .force("charge", d3.forceManyBody().strength(-500))  // Stronger repulsion
     .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collide", d3.forceCollide(30))
+    .force("collide", d3.forceCollide(50))  // Larger collision radius
+    .force("x", d3.forceX(width / 2).strength(0.05))  // Keep nodes centered
+    .force("y", d3.forceY(height / 2).strength(0.05))
 
-  // Render links
+  // Render links with lower opacity
   const link = svg.append("g")
+    .attr("class", "links")
     .attr("stroke", "#999")
-    .attr("stroke-opacity", 0.6)
+    .attr("stroke-opacity", 0.3)  // Reduced opacity
     .selectAll("line")
-    .data(graphData.value.edges)
+    .data(displayEdges)
     .join("line")
-    .attr("stroke-width", d => Math.sqrt(d.value || 1))
+    .attr("stroke-width", 1)  // Thinner lines
 
-  // Render nodes
+  // Render nodes with varying sizes
   const node = svg.append("g")
+    .attr("class", "nodes")
     .attr("stroke", "#fff")
-    .attr("stroke-width", 1.5)
+    .attr("stroke-width", 2)
     .selectAll("circle")
     .data(graphData.value.nodes)
     .join("circle")
-    .attr("r", d => d.status === 'completed' ? 8 : 5)
+    .attr("r", d => {
+      // Larger nodes for root terms (depth 0)
+      if (d.depth === 0) return 12
+      if (d.depth === 1) return 8
+      return 5
+    })
     .attr("fill", d => {
         // Color by depth
         const colors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b"]
@@ -82,19 +107,21 @@ const renderGraph = () => {
   node.append("title")
     .text(d => d.label)
     
-  // Labels
+  // Labels - ONLY show for depth 0 and 1 nodes to reduce clutter
   const labels = svg.append("g")
     .attr("class", "labels")
     .selectAll("text")
-    .data(graphData.value.nodes)
+    .data(graphData.value.nodes.filter(n => n.depth <= 1))  // Only root and first layer
     .enter()
     .append("text")
-    .attr("dx", 12)
+    .attr("dx", 14)
     .attr("dy", ".35em")
-    .text(d => d.label)
-    .style("font-size", "10px")
+    .text(d => d.label.length > 20 ? d.label.substring(0, 18) + '...' : d.label)  // Truncate long labels
+    .style("font-size", d => d.depth === 0 ? "12px" : "9px")
+    .style("font-weight", d => d.depth === 0 ? "bold" : "normal")
     .style("pointer-events", "none")
     .style("fill", "#333")
+    .style("text-shadow", "1px 1px 2px white, -1px -1px 2px white")  // Better readability
 
   simulation.on("tick", () => {
     link
@@ -150,15 +177,144 @@ onMounted(() => {
 onUnmounted(() => {
   if (simulation) simulation.stop()
 })
+
+// Export functions - capture full graph regardless of zoom state
+const getFullGraphSVG = () => {
+  if (!container.value) return null
+  const svgElement = container.value.querySelector('svg')
+  if (!svgElement) return null
+  
+  // Clone SVG to avoid modifying the displayed one
+  const clonedSvg = svgElement.cloneNode(true)
+  
+  // Remove any transform from groups (zoom/pan state)
+  const groups = clonedSvg.querySelectorAll('g')
+  groups.forEach(g => {
+    g.removeAttribute('transform')
+  })
+  
+  // Calculate bounding box of all nodes
+  const nodes = graphData.value.nodes
+  if (nodes.length === 0) return null
+  
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  nodes.forEach(n => {
+    if (n.x !== undefined && n.y !== undefined) {
+      minX = Math.min(minX, n.x - 50)
+      minY = Math.min(minY, n.y - 50)
+      maxX = Math.max(maxX, n.x + 150)  // Extra space for labels
+      maxY = Math.max(maxY, n.y + 50)
+    }
+  })
+  
+  // Add padding
+  const padding = 50
+  minX -= padding
+  minY -= padding
+  maxX += padding
+  maxY += padding
+  
+  const width = maxX - minX
+  const height = maxY - minY
+  
+  // Update viewBox to show all content
+  clonedSvg.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`)
+  clonedSvg.setAttribute('width', width)
+  clonedSvg.setAttribute('height', height)
+  
+  return clonedSvg
+}
+
+const exportAsSVG = () => {
+  const clonedSvg = getFullGraphSVG()
+  if (!clonedSvg) return
+  
+  const serializer = new XMLSerializer()
+  const svgString = serializer.serializeToString(clonedSvg)
+  const blob = new Blob([svgString], { type: 'image/svg+xml' })
+  const url = URL.createObjectURL(blob)
+  
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `knowledge_graph_task_${props.taskId}.svg`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+const exportAsPNG = () => {
+  const clonedSvg = getFullGraphSVG()
+  if (!clonedSvg) return
+  
+  const serializer = new XMLSerializer()
+  const svgString = serializer.serializeToString(clonedSvg)
+  
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  const img = new Image()
+  
+  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(svgBlob)
+  
+  img.onload = () => {
+    // Use original size * 2 for high resolution
+    const scale = 2
+    canvas.width = img.width * scale
+    canvas.height = img.height * scale
+    ctx.fillStyle = '#f9fafb'  // Background color
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.scale(scale, scale)
+    ctx.drawImage(img, 0, 0)
+    
+    const pngUrl = canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = pngUrl
+    a.download = `knowledge_graph_task_${props.taskId}.png`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+  img.src = url
+}
+
+const exportAsJSON = () => {
+  const data = {
+    nodes: graphData.value.nodes,
+    edges: graphData.value.edges
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `knowledge_graph_task_${props.taskId}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
   <div class="border rounded-lg bg-white p-4 shadow-sm">
     <div class="flex justify-between items-center mb-4 border-b pb-2">
         <h3 class="font-bold text-gray-700">Knowledge Graph</h3>
-        <button @click="fetchGraphData" class="text-sm text-blue-600 hover:text-blue-800">
-            Refresh
-        </button>
+        <div class="flex gap-2">
+            <button @click="exportAsPNG" class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                🖼️ PNG
+            </button>
+            <button @click="exportAsSVG" class="text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition">
+                📝 SVG
+            </button>
+            <button @click="exportAsJSON" class="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition">
+                📄 JSON
+            </button>
+            <button @click="fetchGraphData" class="text-sm px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition">
+                🔄 Refresh
+            </button>
+        </div>
     </div>
     
     <div v-if="loading" class="flex justify-center py-12">

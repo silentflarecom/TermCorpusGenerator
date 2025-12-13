@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import VisualGraph from './VisualGraph.vue'
 
 const props = defineProps({
   taskId: {
@@ -15,6 +16,7 @@ const terms = ref([])
 const loading = ref(true)
 const filterStatus = ref('all')
 const expandedTerm = ref(null)
+const activeTab = ref('table')
 
 const filteredTerms = computed(() => {
   if (filterStatus.value === 'all') return terms.value
@@ -92,6 +94,26 @@ onMounted(() => {
       </div>
       
       <div v-else>
+        <!-- Tabs -->
+        <div class="flex gap-4 border-b border-gray-200 mb-4">
+          <button
+            @click="activeTab = 'table'"
+            class="py-2 text-sm font-medium border-b-2 transition-colors"
+            :class="activeTab === 'table' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          >
+            📋 Results Table
+          </button>
+          <button
+            @click="activeTab = 'graph'"
+            class="py-2 text-sm font-medium border-b-2 transition-colors"
+            :class="activeTab === 'graph' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          >
+            🕸️ Knowledge Graph
+          </button>
+        </div>
+
+        <!-- Table Tab -->
+        <div v-if="activeTab === 'table'">
         <!-- Toolbar -->
         <div class="flex justify-between items-center mb-6">
           <!-- Filter Tabs -->
@@ -243,8 +265,14 @@ onMounted(() => {
         </div>
         
         <!-- Empty State -->
-        <div v-if="filteredTerms.length === 0" class="text-center py-12">
+        <div v-if="activeTab === 'table' && filteredTerms.length === 0" class="text-center py-12">
           <p class="text-gray-500">No terms found with status: <span class="font-medium">{{ filterStatus }}</span></p>
+        </div>
+        </div>
+        
+        <!-- Graph Tab -->
+        <div v-if="activeTab === 'graph'">
+          <VisualGraph :task-id="taskId" />
         </div>
       </div>
     </div>

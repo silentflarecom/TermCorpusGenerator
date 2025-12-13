@@ -22,7 +22,15 @@ A lightweight, full-stack web application designed to generate bilingual (Englis
 - **💾 Database Persistence**: Uses SQLite to store crawl history, allowing you to resume tasks or export data anytime.
 - **📥 Robust Export**: Download results as valid JSON files or UTF-8 encoded CSVs (Excel compatible).
 
-## 🛠️ Tech Stack
+### 🌐 New Features (v2.1 - Intelligent Association Crawling)
+
+- **🕸️ Knowledge Graph Visualization**: Interactive D3.js force-directed graph showing term relationships.
+- **🎯 Depth-Controlled Crawling**: Configure crawl depth (1-3 levels) to automatically discover related terms from "See Also" and internal links.
+- **📊 Association Tracking**: Stores term relationships (links, categories) in database for graph generation.
+- **�️ Multi-Format Export**: Export knowledge graphs as PNG (high-res), SVG (editable), or JSON (data).
+- **🎯 Smart Label Display**: Only shows labels for root and first-layer nodes to reduce visual clutter.
+
+## �🛠️ Tech Stack
 
 ### Backend
 - **FastAPI**: High-performance web framework.
@@ -34,6 +42,7 @@ A lightweight, full-stack web application designed to generate bilingual (Englis
 ### Frontend
 - **Vue 3 + Vite**: Lightning fast frontend.
 - **TailwindCSS**: Utility-first styling.
+- **D3.js**: Knowledge graph visualization.
 - **Axios**: HTTP client.
 
 ## ⚖️ Compliance & Best Practices
@@ -74,6 +83,8 @@ This tool is designed to strictly adhere to [Wikipedia's User-Agent Policy](http
 - **Knowledge Graph Visualization**:
   - Force-directed graph of term relationships ✅
   - Topic clustering display (via Force Layout) ✅
+  - **Multi-format export: PNG, SVG, JSON** ✅
+  - Smart full-graph capture (ignores zoom state) ✅
 
 #### **Phase 3: Scheduled & Incremental Updates**
 - **Scheduling Options**:
