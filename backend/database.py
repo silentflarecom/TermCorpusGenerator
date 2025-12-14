@@ -52,6 +52,21 @@ async def init_database():
             )
         """)
 
+        # Create system_settings table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Insert default User-Agent if not exists
+        await db.execute("""
+            INSERT OR IGNORE INTO system_settings (key, value)
+            VALUES ('user_agent', 'WikipediaTermCorpusGenerator/2.0 (Student Project; contact@example.com)')
+        """)
+
         # Add columns to existing tables if they don't exist
         # We use a helper to add columns safely
         await add_column_if_not_exists(db, "batch_tasks", "max_depth", "INTEGER DEFAULT 1")
@@ -649,3 +664,28 @@ async def get_terms_by_quality_issue(task_id: int = None, issue_type: str = "all
         return [dict(row) for row in rows]
 
 
+
+async def get_system_setting(key: str, default: str = None) -> str:
+    """Get a system setting value by key"""
+    async with aiosqlite.connect(DATABASE_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT value FROM system_settings WHERE key = ?",
+            (key,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return row['value']
+        return default
+
+async def update_system_setting(key: str, value: str):
+    """Update or insert a system setting"""
+    async with aiosqlite.connect(DATABASE_FILE) as db:
+        await db.execute("""
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES (?, ?, datetime('now'))
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = datetime('now')
+        """, (key, value))
+        await db.commit()

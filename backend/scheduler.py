@@ -10,7 +10,8 @@ from database import (
     get_task_status,
     get_task_terms,
     save_term_associations,
-    add_terms_to_task
+    add_terms_to_task,
+    get_system_setting
 )
 
 # Global dictionary to track running tasks
@@ -43,7 +44,7 @@ SUPPORTED_LANGUAGES = {
 }
 
 class BatchCrawler:
-    def __init__(self, task_id: int, crawl_interval: int = 3, max_depth: int = 1, target_languages: List[str] = None):
+    def __init__(self, task_id: int, crawl_interval: int = 3, max_depth: int = 1, target_languages: List[str] = None, user_agent: str = None):
         self.task_id = task_id
         self.crawl_interval = crawl_interval
         self.max_depth = max_depth
@@ -51,7 +52,9 @@ class BatchCrawler:
         self.should_stop = False
         
         # User-Agent is explicitly set to comply with Wikimedia User-Agent Policy
-        self.USER_AGENT = 'WikipediaTermCorpusGenerator/2.0 (Student Project; contact@silentflare.com; https://github.com/silentflarecom/WikipediaPython)'
+        # Use provided user_agent or fallback to default
+        default_ua = 'WikipediaTermCorpusGenerator/2.0 (Student Project; contact@silentflare.com; https://github.com/silentflarecom/WikipediaPython)'
+        self.USER_AGENT = user_agent or default_ua
         
         # Initialize Wikipedia API instances dynamically for each language
         self.wiki_instances = {}
@@ -362,8 +365,11 @@ async def start_batch_crawl(task_id: int, crawl_interval: int = 3):
     if task_id in running_tasks:
         raise Exception(f"Task {task_id} is already running")
     
+    # Get user agent settings
+    user_agent = await get_system_setting('user_agent')
+    
     # We pass raw params here. run() fetches max_depth and target_languages from DB
-    crawler = BatchCrawler(task_id, crawl_interval)
+    crawler = BatchCrawler(task_id, crawl_interval, user_agent=user_agent)
     task = asyncio.create_task(crawler.run())
     running_tasks[task_id] = task
     

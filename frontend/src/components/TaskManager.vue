@@ -137,6 +137,43 @@ const cancelRestore = () => {
   }
 }
 
+// User Agent Settings
+const userAgent = ref('')
+const loadingSettings = ref(false)
+const savingSettings = ref(false)
+const settingsSuccess = ref(false)
+
+const loadSettings = async () => {
+  loadingSettings.value = true
+  try {
+    const response = await axios.get('http://localhost:8000/api/system/settings/user_agent')
+    userAgent.value = response.data.value
+  } catch (err) {
+    console.warn('Failed to load user agent setting:', err)
+  } finally {
+    loadingSettings.value = false
+  }
+}
+
+const saveSettings = async () => {
+  savingSettings.value = true
+  settingsSuccess.value = false
+  try {
+    await axios.post('http://localhost:8000/api/system/settings', {
+      key: 'user_agent',
+      value: userAgent.value
+    })
+    settingsSuccess.value = true
+    setTimeout(() => {
+      settingsSuccess.value = false
+    }, 3000)
+  } catch (err) {
+    error.value = 'Failed to save settings'
+  } finally {
+    savingSettings.value = false
+  }
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
@@ -165,6 +202,7 @@ const formatBytes = (bytes) => {
 onMounted(() => {
   loadTasks()
   loadStatistics()
+  loadSettings()
 })
 </script>
 
@@ -192,6 +230,41 @@ onMounted(() => {
           <p class="text-sm text-white/80">Database Size</p>
           <p class="text-2xl font-bold">{{ formatBytes(statistics.db_size_bytes) }}</p>
         </div>
+      </div>
+    </div>
+
+    <!-- System Settings -->
+    <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">⚙️ System Configuration</h3>
+          <p class="text-sm text-gray-500">Configure global crawler settings</p>
+        </div>
+      </div>
+      <div class="p-6">
+        <label class="block mb-2 font-medium text-gray-700">User Agent</label>
+        <p class="text-xs text-gray-500 mb-3">
+          Required by Wikipedia API. Must include project name and contact info (email or URL).
+          <br>Default: <code>WikipediaTermCorpusGenerator/2.0 (Student Project; contact@example.com)</code>
+        </p>
+        <div class="flex gap-4">
+          <input
+            v-model="userAgent"
+            type="text"
+            placeholder="e.g. MyBot/1.0 (me@example.com)"
+            class="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+            :disabled="savingSettings"
+          />
+          <button
+            @click="saveSettings"
+            :disabled="savingSettings || loadingSettings"
+            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-2"
+          >
+            <span v-if="savingSettings">💾 Saving...</span>
+            <span v-else>💾 Save Settings</span>
+          </button>
+        </div>
+        <p v-if="settingsSuccess" class="mt-2 text-green-600 text-sm font-medium">✓ Settings saved successfully!</p>
       </div>
     </div>
 

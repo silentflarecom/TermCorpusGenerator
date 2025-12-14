@@ -20,7 +20,8 @@ from database import (
     get_task_status, get_task_terms, get_all_tasks,
     update_task_counters, get_term_associations,
     check_existing_terms, delete_task, reset_database, get_corpus_statistics,
-    analyze_data_quality, clean_task_data, get_terms_by_quality_issue
+    analyze_data_quality, clean_task_data, get_terms_by_quality_issue,
+    get_system_setting, update_system_setting
 )
 from scheduler import start_batch_crawl, cancel_batch_crawl, retry_failed_terms, get_supported_languages
 from models import Association
@@ -596,6 +597,25 @@ async def check_duplicates(request: DuplicateCheckRequest):
     
     result = await check_existing_terms(request.terms)
     return result
+
+
+class SystemSettingRequest(BaseModel):
+    key: str
+    value: str
+
+@app.get("/api/system/settings/{key}")
+async def get_setting(key: str):
+    """Get a system setting"""
+    value = await get_system_setting(key)
+    if value is None:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    return {"key": key, "value": value}
+
+@app.post("/api/system/settings")
+async def update_setting(request: SystemSettingRequest):
+    """Update a system setting"""
+    await update_system_setting(request.key, request.value)
+    return {"status": "success", "key": request.key, "value": request.value}
 
 
 @app.delete("/api/batch/{task_id}")
