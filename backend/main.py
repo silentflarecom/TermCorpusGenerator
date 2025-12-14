@@ -273,35 +273,59 @@ async def retry_failed(task_id: int):
 
 @app.get("/api/batch/{task_id}/export")
 async def export_results(task_id: int, format: str = "json"):
-    """Export task results as JSON or CSV"""
+    """Export task results in various formats
+    
+    Supported formats:
+    - json: Standard JSON array
+    - jsonl: JSON Lines (one JSON object per line) - ML training ready
+    - csv: Comma-separated values with UTF-8 BOM for Excel
+    - tsv: Tab-separated values
+    - tmx: Translation Memory eXchange format
+    - txt: Plain text bilingual pairs
+    """
     terms = await get_task_terms(task_id, "completed")
     
     if not terms:
         raise HTTPException(status_code=404, detail="No completed terms found")
     
     if format == "json":
-        # Create JSON file for download
+        # Standard JSON array
         json_content = json.dumps(terms, ensure_ascii=False, indent=2)
         return StreamingResponse(
             iter([json_content]),
             media_type="application/json",
-            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_results.json"}
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.json"}
+        )
+    
+    elif format == "jsonl":
+        # JSON Lines format - one JSON object per line
+        lines = []
+        for term in terms:
+            obj = {
+                "term": term['term'],
+                "en": term['en_summary'] or '',
+                "zh": term['zh_summary'] or '',
+                "en_url": term['en_url'] or '',
+                "zh_url": term['zh_url'] or ''
+            }
+            lines.append(json.dumps(obj, ensure_ascii=False))
+        
+        content = '\n'.join(lines)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/jsonl",
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.jsonl"}
         )
     
     elif format == "csv":
-        # Use UTF-8 BOM for proper Chinese display in Excel
+        # CSV with UTF-8 BOM for Excel compatibility
         output = io.BytesIO()
-        # Write UTF-8 BOM
-        output.write(b'\xef\xbb\xbf')
+        output.write(b'\xef\xbb\xbf')  # UTF-8 BOM
         
-        # Create CSV content
         csv_content = io.StringIO()
         writer = csv.writer(csv_content)
-        
-        # Write header
         writer.writerow(['Term', 'English Summary', 'English URL', 'Chinese Summary', 'Chinese URL'])
         
-        # Write data
         for term in terms:
             writer.writerow([
                 term['term'],
@@ -311,18 +335,108 @@ async def export_results(task_id: int, format: str = "json"):
                 term['zh_url'] or ''
             ])
         
-        # Encode to UTF-8 and write to output
         output.write(csv_content.getvalue().encode('utf-8'))
         output.seek(0)
         
         return StreamingResponse(
             output,
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_results.csv"}
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.csv"}
+        )
+    
+    elif format == "tsv":
+        # Tab-separated values
+        output = io.BytesIO()
+        output.write(b'\xef\xbb\xbf')  # UTF-8 BOM
+        
+        lines = ["Term\tEnglish Summary\tChinese Summary\tEnglish URL\tChinese URL"]
+        for term in terms:
+            # Replace tabs and newlines in content
+            en_summary = (term['en_summary'] or '').replace('\t', ' ').replace('\n', ' ')
+            zh_summary = (term['zh_summary'] or '').replace('\t', ' ').replace('\n', ' ')
+            lines.append(f"{term['term']}\t{en_summary}\t{zh_summary}\t{term['en_url'] or ''}\t{term['zh_url'] or ''}")
+        
+        output.write('\n'.join(lines).encode('utf-8'))
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="text/tab-separated-values; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.tsv"}
+        )
+    
+    elif format == "tmx":
+        # Translation Memory eXchange format
+        tmx_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<!DOCTYPE tmx SYSTEM "tmx14.dtd">',
+            '<tmx version="1.4">',
+            '  <header creationtool="TermCorpusGenerator" creationtoolversion="2.0" datatype="plaintext" segtype="sentence" adminlang="en" srclang="en" o-tmf="unknown"/>',
+            '  <body>'
+        ]
+        
+        for term in terms:
+            en_text = (term['en_summary'] or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            zh_text = (term['zh_summary'] or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            
+            tmx_lines.extend([
+                f'    <tu tuid="{term["term"]}">',
+                f'      <tuv xml:lang="en">',
+                f'        <seg>{en_text}</seg>',
+                f'      </tuv>',
+                f'      <tuv xml:lang="zh">',
+                f'        <seg>{zh_text}</seg>',
+                f'      </tuv>',
+                f'    </tu>'
+            ])
+        
+        tmx_lines.extend([
+            '  </body>',
+            '</tmx>'
+        ])
+        
+        content = '\n'.join(tmx_lines)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/xml",
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.tmx"}
+        )
+    
+    elif format == "txt":
+        # Plain text bilingual pairs
+        lines = [f"# Task {task_id} Bilingual Corpus", f"# Total: {len(terms)} terms", ""]
+        
+        for i, term in enumerate(terms, 1):
+            lines.extend([
+                f"[{i}] {term['term']}",
+                "-" * 50,
+                "EN:",
+                term['en_summary'] or 'N/A',
+                "",
+                "ZH:",
+                term['zh_summary'] or 'N/A',
+                "",
+                "=" * 50,
+                ""
+            ])
+        
+        content = '\n'.join(lines)
+        output = io.BytesIO()
+        output.write(b'\xef\xbb\xbf')  # UTF-8 BOM
+        output.write(content.encode('utf-8'))
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_corpus.txt"}
         )
     
     else:
-        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+        raise HTTPException(
+            status_code=400, 
+            detail="Format must be one of: json, jsonl, csv, tsv, tmx, txt"
+        )
 
 
 

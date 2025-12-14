@@ -229,22 +229,56 @@ onMounted(async () => {
                 暂无可导出数据
               </p>
               <p v-else class="text-sm text-gray-600 mt-1">
-                可导出 {{ completedCount }} 条数据，支持多种格式
+                可导出 {{ completedCount }} 条数据，支持 6 种格式
               </p>
             </div>
             
-            <div v-if="isExportReady" class="flex gap-2">
+            <div v-if="isExportReady" class="flex flex-wrap gap-2">
+              <!-- ML Training Formats -->
+              <button
+                @click="exportResults('jsonl')"
+                class="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition"
+                title="JSON Lines - 机器学习训练格式"
+              >
+                🤖 JSONL
+              </button>
               <button
                 @click="exportResults('json')"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                title="标准JSON格式"
               >
                 📄 JSON
               </button>
+              <!-- Translation Formats -->
+              <button
+                @click="exportResults('tmx')"
+                class="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition"
+                title="Translation Memory eXchange - 翻译记忆标准"
+              >
+                🌐 TMX
+              </button>
+              <!-- Table Formats -->
               <button
                 @click="exportResults('csv')"
-                class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition"
+                class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition"
+                title="Excel兼容格式"
               >
                 📊 CSV
+              </button>
+              <button
+                @click="exportResults('tsv')"
+                class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition"
+                title="Tab分隔格式"
+              >
+                📋 TSV
+              </button>
+              <!-- Plain Text -->
+              <button
+                @click="exportResults('txt')"
+                class="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition"
+                title="纯文本双语对照"
+              >
+                📝 TXT
               </button>
             </div>
             <div v-else class="text-gray-400">
