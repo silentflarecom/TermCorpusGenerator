@@ -19,7 +19,8 @@ from database import (
     init_database, create_batch_task, add_terms_to_task,
     get_task_status, get_task_terms, get_all_tasks,
     update_task_counters, get_term_associations,
-    check_existing_terms, delete_task, reset_database, get_corpus_statistics
+    check_existing_terms, delete_task, reset_database, get_corpus_statistics,
+    analyze_data_quality, clean_task_data, get_terms_by_quality_issue
 )
 from scheduler import start_batch_crawl, cancel_batch_crawl, retry_failed_terms
 from models import Association
@@ -428,6 +429,85 @@ async def backup_database():
         filename="corpus_backup.db",
         media_type="application/octet-stream"
     )
+
+
+# ========== Sprint 2: Data Quality Control ==========
+
+class CleanDataRequest(BaseModel):
+    task_id: int | None = None
+    remove_failed: bool = True
+    remove_missing_chinese: bool = False
+    remove_short_summaries: bool = False
+    min_summary_length: int = 50
+
+@app.get("/api/quality/analyze")
+async def analyze_quality(task_id: int = None, min_summary_length: int = 50):
+    """Analyze data quality for a specific task or all tasks
+    
+    Returns detailed quality metrics including:
+    - Total terms analyzed
+    - Complete bilingual pairs
+    - Missing Chinese translations
+    - English/Chinese summaries that are too short
+    - Quality score (0-100)
+    - List of problematic terms
+    """
+    quality = await analyze_data_quality(task_id, min_summary_length)
+    return quality
+
+
+@app.post("/api/quality/clean")
+async def clean_data(request: CleanDataRequest):
+    """Clean data by removing low-quality entries
+    
+    Options:
+    - remove_failed: Remove all failed terms
+    - remove_missing_chinese: Remove terms without Chinese translation
+    - remove_short_summaries: Remove terms with summaries shorter than min_summary_length
+    """
+    if not (request.remove_failed or request.remove_missing_chinese or request.remove_short_summaries):
+        raise HTTPException(
+            status_code=400,
+            detail="At least one removal option must be enabled"
+        )
+    
+    result = await clean_task_data(
+        task_id=request.task_id,
+        remove_failed=request.remove_failed,
+        remove_missing_chinese=request.remove_missing_chinese,
+        remove_short_summaries=request.remove_short_summaries,
+        min_summary_length=request.min_summary_length
+    )
+    return {
+        "message": f"Cleaned {result['total_removed']} entries",
+        **result
+    }
+
+
+@app.get("/api/quality/issues")
+async def get_quality_issues(task_id: int = None, issue_type: str = "all", limit: int = 100):
+    """Get terms with specific quality issues
+    
+    issue_type options:
+    - 'all': All problematic terms
+    - 'missing_chinese': Terms without Chinese translation
+    - 'short_en': English summary too short
+    - 'short_zh': Chinese summary too short
+    - 'failed': Failed terms
+    """
+    if issue_type not in ['all', 'missing_chinese', 'short_en', 'short_zh', 'failed']:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid issue_type. Must be one of: all, missing_chinese, short_en, short_zh, failed"
+        )
+    
+    terms = await get_terms_by_quality_issue(task_id, issue_type, limit)
+    return {
+        "issue_type": issue_type,
+        "task_id": task_id,
+        "count": len(terms),
+        "terms": terms
+    }
 
 if __name__ == "__main__":
     import uvicorn

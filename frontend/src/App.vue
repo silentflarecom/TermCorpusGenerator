@@ -5,8 +5,9 @@ import BatchImport from './components/BatchImport.vue'
 import ProgressMonitor from './components/ProgressMonitor.vue'
 import ResultsTable from './components/ResultsTable.vue'
 import TaskManager from './components/TaskManager.vue'
+import QualityReport from './components/QualityReport.vue'
 
-// Active view: 'single', 'batch', or 'manage'
+// Active view: 'single', 'batch', 'manage', or 'quality'
 const activeView = ref('single')
 
 // Single search state
@@ -156,6 +157,17 @@ const handleViewTask = (taskId) => {
         >
           ⚙️ Manage
         </button>
+        <button
+          @click="activeView = 'quality'"
+          :class="[
+            'px-8 py-3 rounded-xl font-semibold text-lg transition-all shadow-md',
+            activeView === 'quality'
+              ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-200'
+              : 'bg-white text-gray-600 hover:bg-gray-50'
+          ]"
+        >
+          📊 Quality
+        </button>
       </div>
 
       <!-- Single Search View -->
@@ -304,6 +316,11 @@ const handleViewTask = (taskId) => {
       <!-- Manage View -->
       <div v-if="activeView === 'manage'" class="space-y-6">
         <TaskManager @view-task="handleViewTask" />
+      </div>
+
+      <!-- Quality View -->
+      <div v-if="activeView === 'quality'" class="space-y-6">
+        <QualityReport />
       </div>
     </div>
   </div>

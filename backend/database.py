@@ -352,3 +352,293 @@ async def get_corpus_statistics() -> dict:
         
         return stats
 
+
+async def analyze_data_quality(task_id: int = None, min_summary_length: int = 50) -> dict:
+    """Analyze data quality for a specific task or all tasks
+    
+    Returns detailed quality metrics including:
+    - Total terms analyzed
+    - Complete bilingual pairs
+    - Missing Chinese translations
+    - Missing English content
+    - Summary too short (below min_summary_length)
+    - Failed terms
+    - Terms with associations
+    """
+    async with aiosqlite.connect(DATABASE_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        
+        # Build WHERE clause based on task_id
+        where_clause = f"WHERE task_id = {task_id}" if task_id else ""
+        task_filter = f"AND task_id = {task_id}" if task_id else ""
+        
+        quality = {
+            "task_id": task_id,
+            "analyzed_at": datetime.now().isoformat(),
+            "min_summary_length": min_summary_length
+        }
+        
+        # Total terms
+        cursor = await db.execute(f"SELECT COUNT(*) FROM terms {where_clause}")
+        quality['total_terms'] = (await cursor.fetchone())[0]
+        
+        # Completed terms
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' {task_filter.replace('AND', 'AND' if task_id else '')}
+        """.replace('AND  AND', 'AND'))
+        quality['completed_terms'] = (await cursor.fetchone())[0]
+        
+        # Failed terms
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'failed' {task_filter.replace('AND', 'AND' if task_id else '')}
+        """.replace('AND  AND', 'AND'))
+        quality['failed_terms'] = (await cursor.fetchone())[0]
+        
+        # Pending terms
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'pending' {task_filter.replace('AND', 'AND' if task_id else '')}
+        """.replace('AND  AND', 'AND'))
+        quality['pending_terms'] = (await cursor.fetchone())[0]
+        
+        # Complete bilingual pairs (both EN and ZH present and non-empty)
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' 
+            AND en_summary IS NOT NULL AND en_summary != ''
+            AND zh_summary IS NOT NULL AND zh_summary != ''
+            {task_filter}
+        """)
+        quality['complete_bilingual'] = (await cursor.fetchone())[0]
+        
+        # Missing Chinese translation
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' 
+            AND en_summary IS NOT NULL AND en_summary != ''
+            AND (zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.')
+            {task_filter}
+        """)
+        quality['missing_chinese'] = (await cursor.fetchone())[0]
+        
+        # Missing English (should be rare, but check anyway)
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' 
+            AND (en_summary IS NULL OR en_summary = '')
+            {task_filter}
+        """)
+        quality['missing_english'] = (await cursor.fetchone())[0]
+        
+        # English summary too short
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' 
+            AND en_summary IS NOT NULL 
+            AND LENGTH(en_summary) < ?
+            {task_filter}
+        """, (min_summary_length,))
+        quality['en_summary_too_short'] = (await cursor.fetchone())[0]
+        
+        # Chinese summary too short
+        cursor = await db.execute(f"""
+            SELECT COUNT(*) FROM terms 
+            WHERE status = 'completed' 
+            AND zh_summary IS NOT NULL AND zh_summary != '' 
+            AND zh_summary != 'Translation not found.'
+            AND LENGTH(zh_summary) < ?
+            {task_filter}
+        """, (min_summary_length,))
+        quality['zh_summary_too_short'] = (await cursor.fetchone())[0]
+        
+        # Get list of problematic terms for detailed view
+        cursor = await db.execute(f"""
+            SELECT id, term, 
+                CASE 
+                    WHEN zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.' THEN 'missing_chinese'
+                    WHEN LENGTH(en_summary) < ? THEN 'en_too_short'
+                    WHEN LENGTH(zh_summary) < ? THEN 'zh_too_short'
+                    ELSE 'unknown'
+                END as issue_type
+            FROM terms 
+            WHERE status = 'completed' 
+            AND (
+                zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.'
+                OR LENGTH(en_summary) < ?
+                OR (zh_summary IS NOT NULL AND zh_summary != '' AND zh_summary != 'Translation not found.' AND LENGTH(zh_summary) < ?)
+            )
+            {task_filter}
+            LIMIT 50
+        """, (min_summary_length, min_summary_length, min_summary_length, min_summary_length))
+        
+        rows = await cursor.fetchall()
+        quality['problematic_terms'] = [
+            {"id": row['id'], "term": row['term'], "issue": row['issue_type']}
+            for row in rows
+        ]
+        
+        # Calculate quality score (0-100)
+        if quality['completed_terms'] > 0:
+            issues = quality['missing_chinese'] + quality['en_summary_too_short'] + quality['zh_summary_too_short']
+            quality['quality_score'] = round(
+                (quality['completed_terms'] - issues) / quality['completed_terms'] * 100, 1
+            )
+        else:
+            quality['quality_score'] = 0
+        
+        return quality
+
+
+async def clean_task_data(
+    task_id: int = None,
+    remove_failed: bool = True,
+    remove_missing_chinese: bool = False,
+    remove_short_summaries: bool = False,
+    min_summary_length: int = 50
+) -> dict:
+    """Clean data by removing low-quality entries
+    
+    Returns count of removed items
+    """
+    async with aiosqlite.connect(DATABASE_FILE) as db:
+        removed = {
+            "failed_removed": 0,
+            "missing_chinese_removed": 0,
+            "short_summaries_removed": 0,
+            "total_removed": 0,
+            "associations_removed": 0
+        }
+        
+        task_filter = f"AND task_id = {task_id}" if task_id else ""
+        
+        # Collect term IDs to delete
+        term_ids_to_delete = []
+        
+        if remove_failed:
+            cursor = await db.execute(f"""
+                SELECT id FROM terms WHERE status = 'failed' {task_filter}
+            """)
+            failed_ids = [row[0] for row in await cursor.fetchall()]
+            term_ids_to_delete.extend(failed_ids)
+            removed['failed_removed'] = len(failed_ids)
+        
+        if remove_missing_chinese:
+            cursor = await db.execute(f"""
+                SELECT id FROM terms 
+                WHERE status = 'completed' 
+                AND (zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.')
+                {task_filter}
+            """)
+            missing_ids = [row[0] for row in await cursor.fetchall()]
+            # Don't double-count
+            new_ids = [id for id in missing_ids if id not in term_ids_to_delete]
+            term_ids_to_delete.extend(new_ids)
+            removed['missing_chinese_removed'] = len(new_ids)
+        
+        if remove_short_summaries:
+            cursor = await db.execute(f"""
+                SELECT id FROM terms 
+                WHERE status = 'completed' 
+                AND (LENGTH(en_summary) < ? OR 
+                     (zh_summary IS NOT NULL AND zh_summary != '' AND zh_summary != 'Translation not found.' AND LENGTH(zh_summary) < ?))
+                {task_filter}
+            """, (min_summary_length, min_summary_length))
+            short_ids = [row[0] for row in await cursor.fetchall()]
+            new_ids = [id for id in short_ids if id not in term_ids_to_delete]
+            term_ids_to_delete.extend(new_ids)
+            removed['short_summaries_removed'] = len(new_ids)
+        
+        # Delete associations for these terms
+        if term_ids_to_delete:
+            placeholders = ",".join(["?" for _ in term_ids_to_delete])
+            
+            # Count associations before deletion
+            cursor = await db.execute(f"""
+                SELECT COUNT(*) FROM term_associations 
+                WHERE source_term_id IN ({placeholders})
+            """, term_ids_to_delete)
+            removed['associations_removed'] = (await cursor.fetchone())[0]
+            
+            # Delete associations
+            await db.execute(f"""
+                DELETE FROM term_associations WHERE source_term_id IN ({placeholders})
+            """, term_ids_to_delete)
+            
+            # Delete terms
+            await db.execute(f"""
+                DELETE FROM terms WHERE id IN ({placeholders})
+            """, term_ids_to_delete)
+            
+            await db.commit()
+        
+        removed['total_removed'] = len(term_ids_to_delete)
+        
+        # Update task counters if task_id specified
+        if task_id:
+            await update_task_counters(task_id)
+        
+        return removed
+
+
+async def get_terms_by_quality_issue(task_id: int = None, issue_type: str = "all", limit: int = 100) -> list:
+    """Get terms with specific quality issues
+    
+    issue_type can be: 'all', 'missing_chinese', 'short_en', 'short_zh', 'failed'
+    """
+    async with aiosqlite.connect(DATABASE_FILE) as db:
+        db.row_factory = aiosqlite.Row
+        
+        task_filter = f"AND task_id = {task_id}" if task_id else ""
+        
+        if issue_type == "missing_chinese":
+            query = f"""
+                SELECT * FROM terms 
+                WHERE status = 'completed' 
+                AND (zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.')
+                {task_filter}
+                LIMIT ?
+            """
+        elif issue_type == "short_en":
+            query = f"""
+                SELECT * FROM terms 
+                WHERE status = 'completed' 
+                AND LENGTH(en_summary) < 50
+                {task_filter}
+                LIMIT ?
+            """
+        elif issue_type == "short_zh":
+            query = f"""
+                SELECT * FROM terms 
+                WHERE status = 'completed' 
+                AND zh_summary IS NOT NULL AND zh_summary != '' 
+                AND zh_summary != 'Translation not found.'
+                AND LENGTH(zh_summary) < 50
+                {task_filter}
+                LIMIT ?
+            """
+        elif issue_type == "failed":
+            query = f"""
+                SELECT * FROM terms 
+                WHERE status = 'failed'
+                {task_filter}
+                LIMIT ?
+            """
+        else:  # 'all' - return all problematic terms
+            query = f"""
+                SELECT * FROM terms 
+                WHERE (
+                    status = 'failed'
+                    OR (status = 'completed' AND (zh_summary IS NULL OR zh_summary = '' OR zh_summary = 'Translation not found.'))
+                    OR (status = 'completed' AND LENGTH(en_summary) < 50)
+                )
+                {task_filter}
+                LIMIT ?
+            """
+        
+        cursor = await db.execute(query, (limit,))
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
