@@ -18,31 +18,29 @@ npm install
 
 ### 2. Configure User-Agent
 
-⚠️ **IMPORTANT**: Before running the application, you MUST configure your own User-Agent to comply with Wikipedia's policies.
+⚠️ **CRITICAL**: The application comes with a placeholder User-Agent. **You MUST configure your own User-Agent before starting any crawl tasks.**
 
-Wikipedia requires all API users to identify themselves with a User-Agent string that includes:
-- Your project/bot name
-- Contact information (email or GitHub URL)
+Wikipedia's [User-Agent Policy](https://meta.wikimedia.org/wiki/User-Agent_policy) strictly requires all API clients to identify themselves.
 
-**How to set your User-Agent:**
+**Steps to Configure:**
 
-1. Start the application (see Running the Application below)
-2. Navigate to the **Manage** page in the UI
-3. Find the **System Configuration** section
-4. Update the **User Agent** field with your information:
-   ```
-   YourProjectName/1.0 (your-email@example.com)
-   ```
-   or
-   ```
-   YourProjectName/1.0 (https://github.com/YourUsername/YourRepo)
-   ```
-5. Click **Save Settings**
+1. Start the application (see section 3 below).
+2. Go to the **Manage** page in the web interface.
+3. Locate the **User Agent Configuration** panel (look for the yellow warning box).
+4. Enter a User-Agent string that identifies YOUR project.
+   
+   **Format:** `ProjectName/Version (Contact Information)`
 
-**Why this matters:**
-- Wikipedia can contact you if there are issues with your requests
-- It helps Wikipedia track API usage patterns
-- It's required by [Wikipedia's User-Agent Policy](https://meta.wikimedia.org/wiki/User-Agent_policy)
+   **Valid Examples:**
+   - `MyResearchBot/1.0 (mailto:me@university.edu)`
+   - `CorpusBuilder/2.0 (https://github.com/myusername/myproject)`
+   - `WikiDataTool/1.0 (mailto:dev@company.com)`
+
+5. Click **💾 Save Settings**.
+
+> **Note:** The default User-Agent `TermCorpusBot/1.0 (...)` is a placeholder. Using it for heavy crawling may result in IP blocking by Wikipedia.
+
+**Privacy Note:** Your User-Agent is only sent to Wikipedia servers with your API requests. It is stored locally in your `corpus.db` and is never sent to any other third party.
 
 ### 3. Running the Application
 
@@ -100,4 +98,22 @@ For issues or questions:
 
 ---
 
-**Note**: This is an educational project. Please use it responsibly and in compliance with Wikipedia's policies.
+## Troubleshooting
+ 
+ **1. `CORS` errors in browser console:**
+ - Ensure the backend is running (`python -m uvicorn ...`).
+ - Refresh the page. The backend might have been restarting.
+ 
+ **2. Database locked errors:**
+ - SQLite allows only one writer at a time. This usually resolves automatically.
+ - If persistent, check if you have the database file open in another program (like a DB viewer).
+ 
+ **3. "Term not found" errors:**
+ - Check if the term exists on the selected language Wikipedia.
+ - Verify your internet connection.
+ - If crawling many terms, check if you've been rate-limited (slow down requests by increasing delay).
+ - Verify your User-Agent is set correctly.
+ 
+ ---
+ 
+ **Note**: This is an educational project. Please use it responsibly and in compliance with Wikipedia's policies.
